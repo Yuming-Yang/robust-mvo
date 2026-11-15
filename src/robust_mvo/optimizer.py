@@ -126,10 +126,25 @@ def _vec(x: ArrayLike, n: int) -> np.ndarray:
 
 
 def build_problem(
-    inp: Inputs, *, chol_f: np.ndarray | None = None
+    inp: Inputs,
+    *,
+    chol_f: np.ndarray | None = None,
+    frozen: np.ndarray | None = None,
+    elastic: dict[str, float] | None = None,
 ) -> tuple[cp.Problem, cp.Variable]:
-    """Build the cvxpy problem. ``chol_f`` is the lower Cholesky factor of F
-    (computed from the risk model if not given). Returns (problem, w)."""
+    """Build the cvxpy problem. Returns (problem, w).
+
+    ``chol_f``  lower Cholesky factor of F (computed from the risk model if
+                not given).
+    ``frozen``  boolean mask of assets held at w0 (D5).
+    ``elastic`` maps a constraint group to a penalty per unit of violation.
+                Those groups get a non-negative slack instead of a hard limit
+                (the level-2 relaxation; DERIVATIONS.md part 3). Dollar
+                neutrality cannot be made elastic (D2).
+    """
+    elastic = elastic or {}
+    if "dollar_neutral" in elastic:
+        raise ValueError("dollar neutrality is never relaxed (D2)")
     n = inp.n_assets
     if chol_f is None:
         chol_f, _ = inp.risk.factor_cholesky()
@@ -155,14 +170,29 @@ def build_problem(
 
     cs = inp.constraints
     cons: list[cp.Constraint] = []
+    penalty = 0.0
+
+    def limit(group: str, size: int) -> cp.Expression | float:
+        """0 for a hard constraint, or a penalized non-negative slack."""
+        nonlocal penalty
+        if group not in elastic:
+            return 0.0
+        s = cp.Variable(size, nonneg=True, name=f"slack_{group}")
+        penalty = penalty + elastic[group] * cp.sum(s)
+        return s
+
     if cs.dollar_neutral:
         cons.append(cp.sum(w) == 0)
     for group, expr in (("max_position", w), ("max_trade", z), ("max_position_adv", w)):
         cap = getattr(cs, group)
         if cap is not None:
-            cons.append(cp.abs(expr) <= _vec(cap, n))
+            cons.append(cp.abs(expr) <= _vec(cap, n) + limit(group, n))
     if cs.max_gross is not None:
-        cons.append(cp.norm1(w) <= cs.max_gross)
+        cons.append(cp.norm1(w) <= cs.max_gross + limit("max_gross", 1))
+    if frozen is not None and np.any(frozen):
+        idx = np.flatnonzero(frozen)
+        cons.append(w[idx] == inp.w0[idx])
+    obj = obj - penalty
 
     # Rescale the objective so its terms are O(1). Daily variances are ~1e-4, so
     # unscaled objective values sit near the solvers' absolute tolerances and the
