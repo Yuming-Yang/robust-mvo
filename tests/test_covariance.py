@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 from sklearn.covariance import LedoitWolf
 
@@ -107,7 +107,6 @@ def test_mp_edge_values():
 # --- Property test: both stabilizers always return a PD matrix -------------------
 
 
-@settings(max_examples=40, deadline=None)
 @given(
     n=st.integers(2, 40),
     t=st.integers(3, 80),
