@@ -90,8 +90,8 @@ Note: in a local test (cvxpy 1.9.3), OSQP raised `SolverError` on a problem with
 - [x] **Fault injection.** A fake solver that raises, or one that returns `optimal_inaccurate`, moves the chain to the expected next level. CI does not depend on a real solver happening to fail.
 - [x] **N ≈ T notebook.** For N/T from about 0.1 to 1.5 on simulated factor-structured returns, compare sample, Ledoit–Wolf and clipped covariance on: condition number, distance to the true Σ, and the true risk of the resulting minimum-variance portfolio relative to the true optimum. The notebook runs in CI (via `nbmake`) and every number it shows comes from a fixed seed.
 - [x] **`DERIVATIONS.md`.** Hand-derivable steps for every term: the factor-risk reformulation, the Ledoit–Wolf intensity, the Marchenko–Pastur edge, the closed-form solution and its KKT conditions, convexity and the conic form of each cost term, the L1-to-linear reformulation, the elastic relaxation, and the comparative-statics argument.
-- [ ] `uv run pytest` and `ruff` clean in GitHub Actions; no paid APIs; README runs from a fresh clone.
-- [ ] README: one-sentence problem, a runnable demo, results with numbers (from the notebook), design trade-offs, Limitations.
+- [x] `uv run pytest` and `ruff` clean in GitHub Actions; no paid APIs; README runs from a fresh clone.
+- [x] README: one-sentence problem, a runnable demo, results with numbers (from the notebook), design trade-offs, Limitations.
 
 ## Milestones
 
