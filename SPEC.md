@@ -82,14 +82,14 @@ Note: in a local test (cvxpy 1.9.3), OSQP raised `SolverError` on a problem with
 
 ## Acceptance criteria
 
-- [ ] **Property tests (hypothesis).** For randomly generated feasible inputs: when the report says level 0 or 1, every constraint holds on the returned `w` within a stated tolerance (proposed 1e-6 in weight units); at level 2 the reported violations match the violations measured on `w`; at level 3, `w == w0` exactly.
-- [ ] **Comparative-statics tests.** Raising `gamma` never increases ex-ante risk; raising a cost coefficient never increases that cost term's value (both follow from optimality of a convex problem in a single scaled term, proved in `DERIVATIONS.md`).
-- [ ] **Closed-form checks.** With no costs and only dollar neutrality, the solver matches the Lagrangian closed form `w* = (1/2γ) Σ⁻¹ (alpha − η1)`, with η chosen so that `1'w* = 0`, to 1e-6.
-- [ ] **Estimator checks.** The Ledoit–Wolf implementation matches `sklearn.covariance.LedoitWolf` to 1e-10; eigenvalue clipping preserves trace and unit diagonal, and its output is PD with a bounded condition number.
-- [ ] **Ill-conditioned input tests.** One test per row of the table above, each asserting the exact level reached, the recorded reason, and the returned weights.
-- [ ] **Fault injection.** A fake solver that raises, or one that returns `optimal_inaccurate`, moves the chain to the expected next level. CI does not depend on a real solver happening to fail.
-- [ ] **N ≈ T notebook.** For N/T from about 0.1 to 1.5 on simulated factor-structured returns, compare sample, Ledoit–Wolf and clipped covariance on: condition number, distance to the true Σ, and the true risk of the resulting minimum-variance portfolio relative to the true optimum. The notebook runs in CI (via `nbmake`) and every number it shows comes from a fixed seed.
-- [ ] **`DERIVATIONS.md`.** Hand-derivable steps for every term: the factor-risk reformulation, the Ledoit–Wolf intensity, the Marchenko–Pastur edge, the closed-form solution and its KKT conditions, convexity and the conic form of each cost term, the L1-to-linear reformulation, the elastic relaxation, and the comparative-statics argument.
+- [x] **Property tests (hypothesis).** For randomly generated feasible inputs: when the report says level 0 or 1, every constraint holds on the returned `w` within a stated tolerance (proposed 1e-6 in weight units); at level 2 the reported violations match the violations measured on `w`; at level 3, `w == w0` exactly.
+- [x] **Comparative-statics tests.** Raising `gamma` never increases ex-ante risk; raising a cost coefficient never increases that cost term's value (both follow from optimality of a convex problem in a single scaled term, proved in `DERIVATIONS.md`).
+- [x] **Closed-form checks.** With no costs and only dollar neutrality, the solver matches the Lagrangian closed form `w* = (1/2γ) Σ⁻¹ (alpha − η1)`, with η chosen so that `1'w* = 0`, to 1e-6.
+- [x] **Estimator checks.** The Ledoit–Wolf implementation matches `sklearn.covariance.LedoitWolf` to 1e-10; eigenvalue clipping preserves trace and unit diagonal, and its output is PD with a bounded condition number.
+- [x] **Ill-conditioned input tests.** One test per row of the table above, each asserting the exact level reached, the recorded reason, and the returned weights.
+- [x] **Fault injection.** A fake solver that raises, or one that returns `optimal_inaccurate`, moves the chain to the expected next level. CI does not depend on a real solver happening to fail.
+- [x] **N ≈ T notebook.** For N/T from about 0.1 to 1.5 on simulated factor-structured returns, compare sample, Ledoit–Wolf and clipped covariance on: condition number, distance to the true Σ, and the true risk of the resulting minimum-variance portfolio relative to the true optimum. The notebook runs in CI (via `nbmake`) and every number it shows comes from a fixed seed.
+- [x] **`DERIVATIONS.md`.** Hand-derivable steps for every term: the factor-risk reformulation, the Ledoit–Wolf intensity, the Marchenko–Pastur edge, the closed-form solution and its KKT conditions, convexity and the conic form of each cost term, the L1-to-linear reformulation, the elastic relaxation, and the comparative-statics argument.
 - [ ] `uv run pytest` and `ruff` clean in GitHub Actions; no paid APIs; README runs from a fresh clone.
 - [ ] README: one-sentence problem, a runnable demo, results with numbers (from the notebook), design trade-offs, Limitations.
 

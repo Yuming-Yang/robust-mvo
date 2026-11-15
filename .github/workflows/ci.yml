@@ -21,3 +21,5 @@ jobs:
         run: uv run ruff format --check .
       - name: Test
         run: uv run pytest
+      - name: Notebook
+        run: uv run pytest --nbmake notebooks
