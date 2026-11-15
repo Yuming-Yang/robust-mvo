@@ -192,7 +192,8 @@ def build_problem(
     if frozen is not None and np.any(frozen):
         idx = np.flatnonzero(frozen)
         cons.append(w[idx] == inp.w0[idx])
-    obj = obj - penalty
+    if elastic:
+        obj = obj - penalty
 
     # Rescale the objective so its terms are O(1). Daily variances are ~1e-4, so
     # unscaled objective values sit near the solvers' absolute tolerances and the

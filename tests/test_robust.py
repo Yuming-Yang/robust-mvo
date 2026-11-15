@@ -19,7 +19,10 @@ COSTS = CostModel(linear=5e-4, impact=2e-3)
 def fake(behaviour: dict[str, str]):
     """A solve_fn that fails on demand for some solvers and calls the real one otherwise.
 
-    behaviour maps solver -> "raise" | "error" | "inaccurate_bad" | "nan".
+    behaviour maps solver -> "raise" | "error" | "inaccurate_bad" | "inaccurate_ok"
+    | "nan". "inaccurate_ok" returns the real solution relabelled as
+    optimal_inaccurate, so the D2 acceptance rule is tested without depending
+    on when a real solver happens to stop early (which differs by platform).
     """
 
     def solve_fn(inp, solver, **kw):
@@ -31,6 +34,9 @@ def fake(behaviour: dict[str, str]):
         if mode == "inaccurate_bad":
             w = np.full(inp.n_assets, 0.5)  # violates caps and neutrality
             return Solution(w, "optimal_inaccurate", solver, 0.0, 0.0)
+        if mode == "inaccurate_ok":
+            sol = real_solve(inp, solver, **kw)
+            return Solution(sol.w, "optimal_inaccurate", solver, sol.objective, sol.solve_time)
         if mode == "nan":
             return Solution(np.full(inp.n_assets, np.nan), "optimal", solver, 0.0, 0.0)
         return real_solve(inp, solver, **kw)
@@ -93,18 +99,12 @@ def test_osqp_is_skipped_on_the_three_halves_form_and_used_on_a_qp():
 
 
 def test_inaccurate_accepted_by_default_and_rejected_when_configured():
-    # The CLARABEL AlmostSolved case from milestone 2.
-    inp = inputs(
-        20,
-        gamma=10.0,
-        w0=neutral_w0(20, 0, 0.03),
-        costs=COSTS,
-        constraints=Constraints(max_position=0.05, max_gross=1.0),
-    )
-    _, rep = robust_optimize(inp)
+    inp = inputs(20, w0=neutral_w0(20, 0, 0.03), costs=COSTS, constraints=BOOK)
+    relabel = fake({"CLARABEL": "inaccurate_ok"})
+    _, rep = robust_optimize(inp, solve_fn=relabel)
     assert rep.level == 0 and rep.inaccurate
-    w, rep = robust_optimize(inp, Config(accept_inaccurate=False))
-    assert rep.level >= 1
+    w, rep = robust_optimize(inp, Config(accept_inaccurate=False), solve_fn=relabel)
+    assert rep.level == 1
     assert rep.attempts[0].status == "optimal_inaccurate" and not rep.attempts[0].accepted
     check_invariants(inp, w, rep)
 
