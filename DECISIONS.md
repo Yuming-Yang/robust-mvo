@@ -21,3 +21,17 @@ Design choices made while building, with the alternatives that were dropped. The
 **L1 slack in the elastic problem, not L2.** An L1 penalty is exact for a large enough weight: a feasible problem's optimum is returned unchanged (DERIVATIONS.md 3.1). An L2 penalty would always take some slack. The cost is that violations concentrate on a few assets instead of spreading.
 
 **A pre-check that is necessary but not sufficient.** It gives a readable reason and skips solver calls in the common infeasible cases; the solver remains the authority. Considered: an exact LP feasibility solve as the pre-check. Rejected, since it is one more solver call that the chain's first solve already performs.
+
+## 2026-11-15 — Milestone 4
+
+**Score covariance estimates by the portfolio they produce, not only by matrix error.** The experiment holds alpha and the optimizer fixed and changes only the covariance estimate, then reports true utility relative to the true optimum and the ratio of predicted to true variance. Frobenius error is reported too. The two disagree: Ledoit–Wolf has lower median Frobenius error than the sample covariance at every ratio from 0.25 up (at 0.1 with a strong market factor the medians are within 1%, sample slightly lower), yet worse portfolios than clipping, and with a strong market factor worse than holding nothing from N/T ≈ 0.5.
+
+**Two factor regimes, not one.** With only the strong-market-factor market, the result would read as "Ledoit–Wolf fails". The weak-factor regime shows it holding up (efficiency 0.82–0.93), which places the problem in the identity target rather than in shrinkage itself.
+
+**Stated plainly that the generator favours clipping.** Synthetic data from a factor model plus i.i.d. noise is the model under which Marchenko–Pastur clipping is derived. The README's Limitations say so instead of presenting clipping's win as general.
+
+**The sample covariance is run through the same chain, and "succeeds".** At N ≥ T the PSD guard repairs the singular estimate and the chain reports level 0 with absurd weights. This is kept in the results because it shows what the chain does not do: it guards against numerical failure, not against a bad estimate.
+
+## 2026-11-15 — Process
+
+**PR #3 was merged with CI red.** The CI watch ran in the background, and its result was not read before merging. The failure was a test asserting CLARABEL's exact status on a problem that solves to "optimal" on macOS and "optimal_inaccurate" on Linux. Fixed on `main` in the next commit, which makes those tests check the D2 contract instead of the status string. From then on the CI result is read before every merge.
