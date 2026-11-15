@@ -152,3 +152,106 @@ Listwise deletion is always PSD but discards data. The `max_missing` threshold c
 | `psd_floor` | `O(N³)` |
 
 For the optimizer, the factor form keeps per-solve work at `O(N K)` (Part 2). The `O(N³)` steps happen once per estimation, not once per solve.
+
+## Part 2. The optimization problem (`src/robust_mvo/optimizer.py`)
+
+All weights are fractions of NAV, `z = w − w0` is the trade, and the problem is
+
+```
+maximize    α'w − γ (w'BFB'w + w'Dw) − λ‖z‖₁ − Σ_i c_i|z_i| − Σ_i k_i|z_i|^p
+subject to  1'w = 0,  |w_i| ≤ u_i,  |z_i| ≤ τ_i,  |w_i| ≤ v_i,  ‖w‖₁ ≤ L.
+```
+
+`p ∈ {3/2, 2}` (D1). Every constraint is optional.
+
+### 2.1 Factor-form risk
+
+*Standard practice* (e.g. Grinold & Kahn; Boyd et al. 2017). With `Σ = BFB' + D`, `D` diagonal and `F = L_F L_F'` (Cholesky),
+
+```
+w'Σw = w'B L_F L_F' B'w + Σ_i D_i w_i² = ‖L_F' (B'w)‖² + ‖√D ∘ w‖².
+```
+
+The solver sees the `K`-vector `f = B'w` and two sums of squares. The problem data has about `NK + K² + N` nonzeros instead of the `N²` of a dense `Σ`, so per-solve work scales with `NK`. This needs `F` to be positive definite, which is why `risk_model.py` repairs `F` before the Cholesky step and records the repair.
+
+In full-covariance mode (`B = I`, `F = Σ`, `D = 0`) the same code solves the dense problem. The tests use it to check the factor form against the dense quadratic form.
+
+### 2.2 Closed form with dollar neutrality (the KKT check)
+
+*Standard.* With no costs and no constraints other than `1'w = 0`, the problem is `max α'w − γw'Σw` subject to `1'w = 0`. The objective is strictly concave when `Σ` is PD, so the KKT point is the unique optimum.
+
+Lagrangian: `ℒ(w, η) = α'w − γw'Σw − η·1'w`.
+
+Stationarity: `α − 2γΣw − η1 = 0`, so `w = Σ⁻¹(α − η1) / (2γ)`.
+
+Feasibility: `1'w = 0` gives `1'Σ⁻¹α = η·1'Σ⁻¹1`, so `η = 1'Σ⁻¹α / 1'Σ⁻¹1`.
+
+Reading: `η` is the part of alpha shared by every asset, the "market" bet that dollar neutrality forbids. It is removed before inverting `Σ`. Without the constraint, `η = 0` and `w = Σ⁻¹α/(2γ)`. Both forms are tested against the solver in `test_matches_closed_form`, in factor and full-covariance mode.
+
+Linking back to 1.1: `Σ⁻¹` is where small, noisy eigenvalues blow up the weights. Everything in Part 1 exists to make this inverse trustworthy.
+
+### 2.3 Transaction cost terms
+
+*Standard literature, with the exponent choice made in D1.* Model the price impact of trading `|z|` (as a fraction of NAV) as `I(z) = η σ (|z| / ADV)^β`, with `σ` daily volatility and `ADV` daily volume as a fraction of NAV. The cost of the trade is size times impact:
+
+```
+cost(z) = |z| · I(z) = η σ |z|^{1+β} / ADV^β.
+```
+
+| Impact model | β | Cost exponent `p = 1 + β` | Source |
+| --- | --- | --- | --- |
+| Linear temporary impact | 1 | 2 | Almgren & Chriss (2000) |
+| Square-root law | 1/2 | 3/2 | Grinold & Kahn; Boyd et al. (2017) |
+| Empirical fit | ≈ 3/5 | ≈ 1.6 | Almgren, Thum, Hauptmann & Li (2005) |
+
+`square_root_impact()` computes `k_i = η σ_i / √ADV_i` for `p = 3/2`. The half-spread and fees are the linear term `c_i|z_i|`.
+
+**Convexity.** For `p ≥ 1`, `t ↦ t^p` is convex and nondecreasing on `t ≥ 0`, and `|z|` is convex. A convex nondecreasing function of a convex function is convex, so `|z|^p` is convex. Subtracting it from a concave objective keeps the objective concave. This is the rule cvxpy's DCP check applies to `power(abs(z), 1.5)`.
+
+**Conic form, and why OSQP drops out.** `t ≥ |z|^{3/2}` is the same as `|z| ≤ t^{2/3} · 1^{1/3}`. That is membership of `(t, 1, z)` in the 3-D power cone `{(x, y, z) : x^α y^{1−α} ≥ |z|, x, y ≥ 0}` with `α = 2/3`. CLARABEL and SCS handle power cones. OSQP only takes quadratic objectives with linear constraints, so it cannot represent the 3/2 term. The test `test_osqp_cannot_take_the_three_halves_form...` confirms this. With `p = 2` the term is `k z²` and the whole problem stays a QP, so OSQP is a valid fallback (`Inputs.is_qp()`).
+
+### 2.4 L1 terms, and the no-trade region
+
+*Standard (Lobo, Fazel & Boyd 2007), with the D3 consequence spelled out.*
+
+**LP form.** `|z_i|` is handled by an epigraph variable: `|z_i| ≤ s_i` is the pair of linear constraints `−s_i ≤ z_i ≤ s_i`. Caps `|w_i| ≤ u_i` and `‖w‖₁ ≤ L` are linear in the same way.
+
+**L1 turnover merges with linear cost.** `λ‖z‖₁ + Σ_i c_i|z_i| = Σ_i (λ + c_i)|z_i|`. A turnover penalty `λ` plus spread `c` is exactly the same problem as spread `c + λ` (`test_l1_turnover_merges_with_linear_cost`). The library keeps `λ` as a separate parameter because a turnover budget and a spread estimate are set by different people for different reasons. Mathematically they are one term.
+
+**No-trade region.** Let `g(w)` be the smooth concave part (alpha minus risk), and drop the constraints. The objective `g(w) − Σ_i c_i|w_i − w0_i|` is concave, so `w` is optimal iff `0` is in its superdifferential. At `w = w0`, the subdifferential of `|w_i − w0_i|` is the whole interval `[−1, 1]`. So:
+
+```
+w0 is optimal  ⇔  |∂g/∂w_i (w0)| ≤ c_i  for every i,   with ∇g(w0) = α − 2γΣw0.
+```
+
+If the marginal benefit of trading an asset is smaller than its marginal cost, that asset does not trade at all. This produces exact zeros, which is what "sparse trades" means. An L2 penalty `λz²` has derivative `0` at `z = 0`, so it never produces an exact no-trade: every asset trades a little. `test_large_linear_cost_gives_no_trade` sets `c = 1.5·|∇g(w0)|` and checks `w = w0`. It then lowers one `c_i` below its threshold and checks that this asset trades.
+
+### 2.5 Comparative statics without convexity
+
+*Standard argument.* Let `x(t)` minimize `G(x) + t·H(x)` over any fixed set. Take `t₁ < t₂` with optimizers `x₁, x₂`. Optimality of each gives:
+
+```
+G(x₁) + t₁H(x₁) ≤ G(x₂) + t₁H(x₂)
+G(x₂) + t₂H(x₂) ≤ G(x₁) + t₂H(x₁)
+```
+
+Adding the two and cancelling `G` gives `(t₂ − t₁)(H(x₂) − H(x₁)) ≤ 0`, so `H(x₂) ≤ H(x₁)`. The penalized quantity never increases when its weight increases. No convexity, differentiability or uniqueness is needed.
+
+Applied here, written as minimizing the negative objective:
+
+- `t = γ`, `H` = ex-ante variance: risk does not increase with `γ`;
+- `t = c` (scaled), `H = Σ|z_i|`: traded volume does not increase with the linear cost;
+- `t = k` (scaled), `H = Σ|z_i|^p`: same for impact;
+- `t = λ`, `H = ‖z‖₁`: same for turnover.
+
+The tests check these on grids of coefficients. Their tolerance accounts for the solver returning an approximate optimizer.
+
+### 2.6 Objective scaling (project choice)
+
+Positive scaling does not change the argmax: `argmax s·φ(w) = argmax φ(w)` for any `s > 0`. The code multiplies the objective by `s = 1 / (average asset variance)`, computed as `mean_i (diag(BFB')_i + D_i)` in `O(NK²)`.
+
+Why: daily variances are about `1e-4`, so the unscaled objective is about `1e-4` too. Interior-point solvers stop on gap criteria that include an absolute part (CLARABEL's `tol_gap_abs` defaults to `1e-8`). Near the optimum the objective is roughly quadratic with curvature `2γΣ`. An objective error `ε` then allows a weight error of about `√(2ε / (2γλ_min(Σ)))`. With `ε = 1e-8` this can reach `1e-4` to `1e-3`, far above the 1e-6 tolerance in D7. On three QP-form test problems (`scripts/objective_scaling_check.py`), scaling reduced the maximum weight error against a tight-tolerance reference from up to `3.5e-5` to at most `4.3e-7` (recorded in DECISIONS.md).
+
+### 2.7 Inaccurate solutions on the 3/2 form (observed)
+
+On the 3/2-power form, CLARABEL often stops with "AlmostSolved", which cvxpy reports as `optimal_inaccurate`. A likely cause is that many trades sit exactly at `z_i = 0` because of the no-trade region (2.4), which is the tip of the power cone, where interior-point steps get short. The relative gap at stop is around `1e-8`, and the constraint post-check passes. Following D2, `solve()` records the status and the warning instead of raising. Acceptance is decided by the post-check (Part 3).
