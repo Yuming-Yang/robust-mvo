@@ -255,3 +255,57 @@ Why: daily variances are about `1e-4`, so the unscaled objective is about `1e-4`
 ### 2.7 Inaccurate solutions on the 3/2 form (observed)
 
 On the 3/2-power form, CLARABEL often stops with "AlmostSolved", which cvxpy reports as `optimal_inaccurate`. A likely cause is that many trades sit exactly at `z_i = 0` because of the no-trade region (2.4), which is the tip of the power cone, where interior-point steps get short. The relative gap at stop is around `1e-8`, and the constraint post-check passes. Following D2, `solve()` records the status and the warning instead of raising. Acceptance is decided by the post-check (Part 3).
+
+## Part 3. Failure handling (`src/robust_mvo/robust.py`)
+
+### 3.1 The elastic problem and the exact-penalty argument
+
+*Standard (exact penalty functions; e.g. Nocedal & Wright, ch. 17). Applying it to the level-2 relaxation is this project's choice (D2).*
+
+Write the hard problem as `max f(w)` subject to `g_j(w) ≤ 0` for each relaxable constraint, plus constraints that stay hard (dollar neutrality, frozen assets). `f` is concave and each `g_j` is convex: every cap is `|·| − cap ≤ 0`. The elastic problem gives each relaxable constraint a slack:
+
+```
+max  f(w) − M Σ_j s_j    s.t.  g_j(w) ≤ s_j,  s_j ≥ 0.
+```
+
+Per-asset caps get one slack per asset, the gross cap gets one in total. At the optimum `s_j = max(0, g_j(w))`, so this is `max f(w) − M Σ_j g_j(w)⁺`.
+
+**Claim.** If the hard problem is feasible, satisfies Slater's condition, and has optimal multipliers `μ*` with `max_j μ_j* < M`, then the elastic problem has the same optimal value, and every elastic optimum has zero slack.
+
+**Proof.** Strong duality gives `f* = sup_w L(w, μ*)` with `L(w, μ) = f(w) − Σ μ_j g_j(w)`, taken over the hard-constraint set. For any `w` in that set,
+
+```
+f(w) − M Σ g_j(w)⁺  ≤  f(w) − Σ μ_j* g_j(w)⁺  ≤  f(w) − Σ μ_j* g_j(w)  =  L(w, μ*)  ≤  f*.
+```
+
+The first inequality uses `M ≥ μ_j*`, the second `g⁺ ≥ g`. So the elastic value is at most `f*`, and the hard optimizer `w*` reaches `f*` with zero slack. If some `w` with positive slack also reached `f*`, the first inequality would have to hold with equality. That would need `(M − μ_j*) g_j(w)⁺ = 0`, which contradicts `M > μ_j*`. ∎
+
+**What `M` means here.** `μ_j*` is the marginal objective gained per unit of cap loosened. Objective units are expected return per unit of NAV, so `μ*` is bounded by the gradient of the objective, about `|α_i| + 2γ|(Σw)_i| + costs`. With daily alphas around `1e-3`, `M = 1.0` (the default `relax_penalty`) is orders of magnitude larger. `test_elastic_returns_original_optimum_when_feasible` checks the claim numerically.
+
+**When the hard problem is infeasible.** With `M` large, the elastic problem first minimizes total violation `Σ_j g_j(w)⁺`, then optimizes `f` among near-minimizers. Because the penalty is a sum of absolute violations (an L1 penalty), the violation tends to concentrate on a few assets rather than spreading evenly. In `test_relaxation_escalates_to_position_caps`, 0.1 of required shorts is spread across three assets with zero caps. The largest single breach is 0.062, not 0.1/3, because risk and alpha decide where the shorts go. An L2 penalty would spread violations, but it would no longer be exact: with `M Σ s²`, the marginal penalty at `s = 0` is zero, so the solver would always take a little slack.
+
+**Why relax in stages (D2).** Relaxing all caps at once would let the solver breach whichever cap is cheapest. Relaxing liquidity first means position caps and gross leverage are only breached if breaching the trade limits is not enough. `report.relaxed` records the stage that worked.
+
+### 3.2 The feasibility pre-check
+
+*Project choice.* Each asset's reachable set is an interval:
+
+```
+[lo_i, hi_i] = [w0_i − τ_i, w0_i + τ_i] ∩ [−u_i, u_i] ∩ [−v_i, v_i]      (a point {w0_i} if frozen)
+```
+
+Necessary conditions:
+
+1. every interval is non-empty;
+2. dollar neutrality needs `Σ lo_i ≤ 0 ≤ Σ hi_i`. The sum of a vector in a box ranges over exactly that interval;
+3. the gross cap needs `Σ_i dist(0, [lo_i, hi_i]) ≤ L`. That sum is the smallest gross any point in the box can have.
+
+Each check is exact on its own. They are not jointly sufficient. With intervals `[0.1, 0.2]`, `[−0.3, 0.3]`, `[−0.3, 0.3]` and `L = 0.15`, each check passes (smallest gross 0.1). But neutrality needs `w₂ + w₃ ≤ −0.1`, so gross is at least 0.2. `test_solver_detected_infeasibility_skips_level_one` uses this case: the pre-check passes, and the solver proves infeasibility. The pre-check exists to give a specific, readable reason in the common cases, and to skip solver calls that cannot succeed. It costs `O(N)`.
+
+### 3.3 Why a proved infeasibility skips level 1
+
+Infeasibility belongs to the problem data, not the algorithm: if one solver returns an infeasibility certificate, another solver will reach the same conclusion. So the chain goes straight to level 2. A *failure* (exception, iteration limit, NaN, a post-check violation) belongs to the algorithm, so the next solver is worth trying. OSQP is skipped when the problem is not a QP (2.3), and the reason is recorded.
+
+### 3.4 Frozen assets (D5)
+
+An asset with unusable data keeps `w_i = w0_i` through an equality constraint. Its alpha and caps are replaced by values that `w0_i` satisfies, so the solver never sees NaN. Its risk still counts when its exposures and idiosyncratic variance are finite. When they are not, they are set to zero and the reason says so, because that asset's risk contribution is then unknown, not zero. If a frozen asset's `w0_i` already exceeds an original cap, the breach is listed in `report.frozen_cap_breaches`. `report.violations` measures the constraints actually imposed. Without this split, a level-0 solve would appear to violate its caps.
