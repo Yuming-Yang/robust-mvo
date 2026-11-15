@@ -1,6 +1,6 @@
 # SPEC: Robust MVO
 
-Status: scope and design decisions D1–D7 confirmed by the author on 2026-11-15 (see the Decisions section at the end). Repo name: `robust-mvo`. No code yet.
+Status: v1 scope and design decisions D1–D7 fixed on 2026-11-15 (see Decisions at the end). Implemented; see the README for results.
 
 ## Problem
 
@@ -149,7 +149,7 @@ Bibliographic details marked ✓ were checked online on 2026-11-15; the rest are
 
 ## Design decisions: options considered
 
-Each item lists the options, the public basis and the drafter's lean at draft time. The author accepted every lean on 2026-11-15; the outcome is summarized under Decisions below.
+Each item lists the options, the public basis and the lean at draft time. The outcome is summarized under Decisions below.
 
 **D1. Transaction cost form.** Options:
 (a) linear only, `c_i|z_i|` (half-spread plus fees); LP-representable.
@@ -176,7 +176,7 @@ Lean: L1, and say plainly in the docs that it merges with the linear cost; it st
 
 ## Decisions (2026-11-15)
 
-The author confirmed the scope above and the drafter's lean on every item:
+Every item went with the lean above:
 
 1. **D1.** Default cost is linear plus 3/2-power impact; linear plus quadratic is selectable and keeps a QP path for OSQP. No general-exponent parameter.
 2. **D2.** `optimal_inaccurate` is accepted at level 0 or 1 when the post-check finds no violation above tolerance, and the report flags it. Level 2 relaxes the liquidity cap first, then position caps, then gross leverage; dollar neutrality is never relaxed. Level 3 holds `w0`, and any cap it violates is reported, not fixed.
