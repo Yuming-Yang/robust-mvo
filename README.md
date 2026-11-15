@@ -107,3 +107,7 @@ uv run pytest                          # unit and property tests
 uv run pytest --nbmake notebooks       # executes the notebook
 uv run pytest --hypothesis-profile=stress   # 500 examples per property test
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
