@@ -166,8 +166,9 @@ def build_problem(
 
     # Rescale the objective so its terms are O(1). Daily variances are ~1e-4, so
     # unscaled objective values sit near the solvers' absolute tolerances and the
-    # returned weights can be off by 1e-2 (DERIVATIONS.md 2.6). A positive
-    # constant does not change the argmax.
+    # returned weights lose accuracy (up to 3.5e-5 in DECISIONS.md, above the
+    # 1e-6 tolerance; DERIVATIONS.md 2.6). A positive constant does not change
+    # the argmax.
     return cp.Problem(cp.Maximize(objective_scale(inp) * obj), cons), w
 
 
