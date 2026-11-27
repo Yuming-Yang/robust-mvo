@@ -56,7 +56,7 @@ Note: in a local test (cvxpy 1.9.3), OSQP raised `SolverError` on a problem with
 
 | Input | Behaviour |
 | --- | --- |
-| N ≈ T or N > T (singular sample covariance) | Estimation still returns a PD matrix through either stabilizer; diagnostics report the condition number before and after. The raw sample covariance is rejected by the PD check before reaching the solver. |
+| N ≈ T or N > T (singular sample covariance) | Estimation still returns a PD matrix through either stabilizer; diagnostics report the condition number before and after. The raw sample covariance is repaired by `psd_floor`; the chain reports level 0 with `factor_cov_repaired > 0`. |
 | Infeasible constraints. With symmetric caps, `w = 0` always satisfies dollar neutrality, position caps and gross leverage, so infeasibility comes from the trade caps: e.g. `w0` is far from dollar neutral, or above a newly tightened position cap, and the liquidity cap forbids trading far enough to fix it | Level 0 reports `infeasible`; the chain skips level 1 and goes to level 2 with the reason recorded. A cheap pre-check catches the obvious cases before calling a solver. |
 | NaN or inf in `alpha`, `B`, `D` or `ADV` for an asset | The asset is frozen at `w0_i` (no trade) and listed in the report. See Decision D5. |
 | NaN in the return panel | Assets with a missing fraction above a threshold are dropped from estimation; the remaining rows with gaps are dropped (listwise). Pairwise-complete covariance is deliberately not used, because it can be indefinite. A test shows this happening. |
@@ -130,14 +130,14 @@ Zero. No paid APIs, no cloud compute, no paid data; everything runs on a laptop 
 
 ## References (public literature only)
 
-Bibliographic details marked ✓ were checked online on 2026-11-15; the rest are from memory and will be checked against the papers when `DERIVATIONS.md` cites them.
+Bibliographic details marked ✓ were checked online on 2026-11-15; the others were not re-checked.
 
 - ✓ Ledoit, O. & Wolf, M. (2004). A well-conditioned estimator for large-dimensional covariance matrices. *Journal of Multivariate Analysis* 88(2), 365–411.
 - Ledoit, O. & Wolf, M. (2003). Improved estimation of the covariance matrix of stock returns with an application to portfolio selection. *Journal of Empirical Finance* 10(5), 603–621. (Single-index target; alternative if D6 picks a different target.)
 - ✓ Laloux, L., Cizeau, P., Bouchaud, J.-P. & Potters, M. (1999). Noise dressing of financial correlation matrices. *Physical Review Letters* 83(7), 1467–1470.
 - Bun, J., Bouchaud, J.-P. & Potters, M. (2017). Cleaning large correlation matrices: tools from random matrix theory. *Physics Reports* 666, 1–109.
 - Marchenko, V. A. & Pastur, L. A. (1967). Distribution of eigenvalues for some sets of random matrices. *Math. USSR-Sbornik* 1(4), 457–483.
-- ✓ Boyd, S., Busseti, E., Diamond, S., Kahn, R., Koh, K., Nystrup, P. & Speth, J. (2017). Multi-period trading via convex optimization. *Foundations and Trends in Optimization* 3(1), 1–76. (Section on transaction costs uses a linear term plus a 3/2-power impact term scaled by volatility and volume; the exact form will be checked against the PDF.)
+- ✓ Boyd, S., Busseti, E., Diamond, S., Kahn, R., Koh, K., Nystrup, P. & Speth, J. (2017). Multi-period trading via convex optimization. *Foundations and Trends in Optimization* 3(1), 1–76. (Section on transaction costs uses a linear term plus a 3/2-power impact term scaled by volatility and volume; the exact form was not re-checked against the PDF.)
 - Almgren, R. & Chriss, N. (2000). Optimal execution of portfolio transactions. *Journal of Risk* 3(2), 5–39. (Linear temporary impact, so cost is quadratic in trade size.)
 - ✓ Almgren, R., Thum, C., Hauptmann, E. & Li, H. (2005). Direct estimation of equity market impact. *Risk* 18, 57–62. (Temporary impact roughly a 3/5 power of trade rate, so cost scales with about the 1.6 power.)
 - Gârleanu, N. & Pedersen, L. H. (2013). Dynamic trading with predictable returns and transaction costs. *Journal of Finance* 68(6), 2309–2340. (Quadratic costs; smooth partial adjustment toward an aim portfolio.)
