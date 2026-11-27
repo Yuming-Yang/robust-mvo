@@ -4,7 +4,7 @@ For three seeded QP-form problems, compare the weights from a default CLARABEL
 solve with and without objective scaling against a reference solved with
 CLARABEL tolerances of 1e-14.
 
-    PYTHONPATH=src:tests uv run python scripts/objective_scaling_check.py
+    PYTHONPATH=tests uv run python scripts/objective_scaling_check.py
 """
 
 import warnings

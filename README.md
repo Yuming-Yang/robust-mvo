@@ -11,9 +11,12 @@ report.frozen  # assets held because their data was unusable, and why
 
 ## Quick start
 
+Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
+
 ```bash
+git clone https://github.com/Yuming-Yang/robust-mvo && cd robust-mvo
 uv sync
-PYTHONPATH=src uv run python scripts/demo.py
+uv run python scripts/demo.py
 ```
 
 The demo estimates a covariance with N = 50 and T = 60, drops an asset with half its history missing, freezes an asset with no alpha, and runs two rebalances. The second starts from a net-long book whose trade limits cannot reach dollar neutrality in one step:
@@ -46,7 +49,7 @@ Strong market factor:
 
 Weak factors: over N/T from 0.1 to 1.5, Ledoit–Wolf efficiency stays between 0.82 and 0.93 and clipping between 0.94 and 1.00. The sample covariance is below 0 from N/T = 0.5 on in both regimes.
 
-Reproduce: `PYTHONPATH=src uv run python scripts/n_close_to_t.py` (prints both full tables), or open [`notebooks/n_close_to_t.ipynb`](notebooks/n_close_to_t.ipynb), which CI executes.
+Reproduce: `uv run python scripts/n_close_to_t.py` (prints both full tables), or open [`notebooks/n_close_to_t.ipynb`](notebooks/n_close_to_t.ipynb), which CI executes.
 
 What the numbers show:
 
@@ -82,7 +85,7 @@ An `O(N)` interval pre-check catches the common infeasible cases before any solv
 - **3/2-power impact by default, quadratic as an option.** The square-root impact law gives a 3/2-power cost, which needs a power cone, so OSQP (QP only) cannot solve it. The quadratic option keeps a QP path.
 - **L1 turnover penalty, kept as its own parameter.** With a linear cost already in the objective, an L1 turnover penalty is the same term with a larger coefficient (tested). It stays separate because a turnover budget and a spread estimate are set for different reasons.
 - **`optimal_inaccurate` accepted when the post-check passes.** CLARABEL often stops at "AlmostSolved" on the 3/2 form when many trades are exactly zero. Rejecting those would send good solves down the chain.
-- **Objective scaled by 1 / average variance.** Unscaled daily-variance objectives sit near solver tolerances. On three QP test problems, scaling cut the worst weight error from 3.5e-5 to 4.3e-7 (`scripts/objective_scaling_check.py`).
+- **Objective scaled by 1 / average variance.** Unscaled daily-variance objectives sit near solver tolerances. On three QP test problems, scaling cut the worst weight error from 3.5e-5 to 4.3e-7 (`PYTHONPATH=tests uv run python scripts/objective_scaling_check.py`; the script reuses the test builders).
 - **L1 slack in the relaxation.** It is an exact penalty: a feasible problem's solution is unchanged. The cost is that violations concentrate on a few assets.
 - **Listwise deletion, not pairwise-complete covariance.** Pairwise estimates can be indefinite (a test shows a 3-asset example).
 - **Hold the previous book as the last resort.** It trades nothing, so it cannot breach a liquidity limit; any cap it already breaks is reported, not fixed.
