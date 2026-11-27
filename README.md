@@ -47,14 +47,14 @@ Strong market factor:
 | 1.5 | Ledoit–Wolf | −0.38 | 0.44 | 74 |
 | 1.5 | clipping | 0.92 | 0.93 | 97 |
 
-Weak factors: over N/T from 0.1 to 1.5, Ledoit–Wolf efficiency stays between 0.82 and 0.93 and clipping between 0.94 and 1.00. The sample covariance is below 0 from N/T = 0.5 on in both regimes.
+Weak factors: in the notebook, over eight ratios of N/T from 0.1 to 1.5, Ledoit–Wolf efficiency stays between 0.82 and 0.93 and clipping between 0.94 and 1.00. The sample covariance is below 0 from N/T = 0.5 on in both regimes.
 
-Reproduce: `uv run python scripts/n_close_to_t.py` (prints both full tables), or open [`notebooks/n_close_to_t.ipynb`](notebooks/n_close_to_t.ipynb), which CI executes.
+Reproduce: [`notebooks/n_close_to_t.ipynb`](notebooks/n_close_to_t.ipynb), which CI executes, runs all eight ratios. `uv run python scripts/n_close_to_t.py` prints both full tables for five of them (0.25, 0.5, 0.9, 1 and 1.5) in a few seconds; without N/T = 0.1, the weak-factor Ledoit–Wolf range there is 0.82 to 0.88.
 
 What the numbers show:
 
 - The sample covariance fails well before N = T. At N ≥ T it is singular; the PSD guard repairs it and the solver reports success, but the weights are meaningless. The degradation chain guards against numerical failure, not against a bad estimate.
-- Ledoit–Wolf with a scaled-identity target has lower Frobenius error than the sample covariance from N/T = 0.25 on (Frobenius loss is what it minimizes), yet with a strong market factor its portfolios are worse than holding nothing from N/T ≈ 0.5. Shrinking toward μI pulls down the market eigenvalue and pulls individual variances toward their mean.
+- Ledoit–Wolf with a scaled-identity target has lower Frobenius error than the sample covariance from N/T = 0.25 on (Frobenius loss is what it minimizes), yet with a strong market factor its efficiency falls to 0.08 at N/T = 0.5 and is below zero, worse than holding nothing, from 0.75 on. Shrinking toward μI pulls down the market eigenvalue and pulls individual variances toward their mean.
 - Clipping wins here, but see Limitations: the simulated data have exactly the structure clipping assumes.
 
 ## What is in the library
@@ -80,6 +80,8 @@ Every formula is derived by hand in [`DERIVATIONS.md`](DERIVATIONS.md): the Ledo
 
 An `O(N)` interval pre-check catches the common infeasible cases before any solver runs. Assets with non-finite alpha, exposures, idiosyncratic variance or caps are frozen at their current weight and listed.
 
+A factor covariance `F` that is not positive definite is repaired by an eigenvalue floor before level 0 runs. That repair does not change the level and adds no line to `reasons`; it is reported only in `report.factor_cov_repaired`, the number of eigenvalues raised. Callers that care should check it.
+
 ## Design trade-offs
 
 - **3/2-power impact by default, quadratic as an option.** The square-root impact law gives a 3/2-power cost, which needs a power cone, so OSQP (QP only) cannot solve it. The quadratic option keeps a QP path.
@@ -95,6 +97,7 @@ Dropped alternatives and the findings behind these choices are in [`DECISIONS.md
 ## Limitations
 
 - The N ≈ T comparison uses a factor model plus i.i.d. Gaussian noise, the "spiked" structure that eigenvalue clipping assumes. Real returns, heavy tails, or Ledoit–Wolf with a constant-correlation or single-index target could change the ranking. None of these were run.
+- The N ≈ T experiment uses one simulated market and one alpha vector per regime (fixed seeds), with risk aversion 20 and alpha standard deviation 5e-4. The 20 seeds redraw only the return sample used for estimation, so the medians do not show how much the numbers vary across markets or alphas.
 - Ledoit–Wolf is implemented only with the scaled-identity target, and clipping uses noise variance 1 rather than the refinement that removes the market mode first.
 - Single period only: no multi-period trading, execution scheduling or alpha decay.
 - The impact coefficients are inputs; nothing here calibrates them to real trades.
