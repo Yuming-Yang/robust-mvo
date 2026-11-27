@@ -1,6 +1,6 @@
 """Print the README results table for the N ~ T comparison.
 
-    PYTHONPATH=src uv run python scripts/n_close_to_t.py
+    uv run python scripts/n_close_to_t.py
 
 N = 100 assets, 20 seeds per ratio, medians reported. Deterministic: every
 random draw is seeded.

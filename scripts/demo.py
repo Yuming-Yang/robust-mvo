@@ -1,6 +1,6 @@
 """A two-minute tour: one normal rebalance, then one that cannot be done as asked.
 
-PYTHONPATH=src uv run python scripts/demo.py
+uv run python scripts/demo.py
 """
 
 import numpy as np
